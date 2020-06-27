@@ -19,7 +19,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.8"
+	Version                = "v0.0.9"
 )
 
 func init() {
@@ -36,13 +36,13 @@ type TTLMap struct {
 	l sync.Mutex
 }
 
-func NewTTLMap(ln int, maxTTL int) (m *TTLMap) {
-	m = &TTLMap{m: make(map[string]*ttlMapItem, ln)}
+func NewTTLMap(maxTTLInSeconds int) (m *TTLMap) {
+	m = &TTLMap{m: make(map[string]*ttlMapItem)}
 	go func() {
 		for now := range time.Tick(time.Second) {
 			m.l.Lock()
 			for k, v := range m.m {
-				if now.Unix() - v.lastAccess > int64(maxTTL) {
+				if now.Unix() - v.lastAccess > int64(maxTTLInSeconds) {
 					delete(m.m, k)
 				}
 			}
@@ -145,6 +145,9 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 	log.Println("******* saaspanel " + Version)
 	log.Println(uuid.New())
 
+	// initialize ttl map
+	ttlMap := NewTTLMap(60) // set TTL to 1 minute, which should cover 99% of the max duration across all hasura queries
+
 	for m := range logstream {
 
 		var data map[string]interface{}
@@ -179,6 +182,9 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 		}
 
 		// adapt hasura logs
+		// NOTE: for a given request id, the order in which Hasura write the logs is:
+		//       1) Query Log
+		//       2) HTTP Log
 		if detailVal, ok1 := data["detail"]; ok1 {
 			d := detailVal.(map[string]interface{})
 			if operation, ok2 := d["operation"]; ok2 { // adapt hasura http log
@@ -187,6 +193,9 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				// set tracing props
 				data["sp_trace_id"] = requestID
 				data["sp_span_id"] = "http-" + requestID
+
+				// set operation name that we stored in our TTL
+				data["hasura_query_operation_name"] = ttlMap.Get(requestID)
 
 				// convert query execution time from seconds to milliseconds
 				data["hasura_query_execution_time_in_ms"] = operation.(map[string]interface{})["query_execution_time"].(float64) * 1000
@@ -198,7 +207,10 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				data["sp_span_id"] = "query-" + requestID
 				data["sp_parent_span_id"] = "http-" + requestID
 
-				data["hasura_operation_name"], _ = query.(map[string]interface{})["operation_name"].(string)
+				// set hasura query operation name **AND** add to TTL Map so we can send it with the HTTP Log
+				hasuraQueryOperationName, _ := query.(map[string]interface{})["operation_name"].(string)
+				data["hasura_query_operation_name"] = hasuraQueryOperationName
+				m[requestID] = hasuraQueryOperationName
 			}
 		}
 
