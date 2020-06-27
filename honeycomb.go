@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/gliderlabs/logspout/router"
+	"github.com/google/uuid"
 	"github.com/honeycombio/libhoney-go"
 )
 
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.5"
+	Version                = "v0.0.6"
 )
 
 func init() {
