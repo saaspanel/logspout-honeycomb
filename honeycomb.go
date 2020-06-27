@@ -181,17 +181,11 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 			d := detailVal.(map[string]interface{});
 			if operation, ok2 := d["operation"]; ok2 { // adapt hasura http log
 				data["sp_trace_id"], _ = operation.(map[string]interface{})["request_id"].(string)
-			} else {
-				data["sp_trace_id"] = "no-go2"
+			} else if query, ok2 := d["query"]; ok2 { // adapt hasura query log
+				data["sp_trace_id"], _ = d["request_id"].(string)
+				data["hasura_operation_name"], _ = query.(map[string]interface{})["operation_name"].(string)
 			}
-			// } else if query, ok2 := detailMap["query"]; ok2 { // adapt hasura query log
-			// 	data["sp_trace_id"], _ = detailMap["request_id"].(string)
-			// 	data["hasura_operation_name"], _ = query.(map[string]interface{})["operation_name"].(string)
-			// }
-		} else {
-			data["sp_trace_id"] = "no-go1"
 		}
-
 
 		ev.Add(data)
 
