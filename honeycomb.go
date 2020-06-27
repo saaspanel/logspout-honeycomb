@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gliderlabs/logspout/router"
@@ -17,11 +18,63 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
+	Version                = "v11"
 )
 
 func init() {
 	router.AdapterFactories.Register(NewHoneycombAdapter, "honeycomb")
 	libhoney.UserAgentAddition = "logspout-honeycomb"
+}
+
+type item struct {
+	value      string
+	lastAccess int64
+}
+type TTLMap struct {
+	m map[string]*item
+	l sync.Mutex
+}
+
+func NewTTLMap(ln int, maxTTL int) (m *TTLMap) {
+	m = &TTLMap{m: make(map[string]*item, ln)}
+	go func() {
+		for now := range time.Tick(time.Second) {
+			m.l.Lock()
+			for k, v := range m.m {
+				if now.Unix() - v.lastAccess > int64(maxTTL) {
+					delete(m.m, k)
+				}
+			}
+			m.l.Unlock()
+		}
+	}()
+	return
+}
+
+func (m *TTLMap) Len() int {
+	return len(m.m)
+}
+
+func (m *TTLMap) Put(k, v string) {
+	m.l.Lock()
+	it, ok := m.m[k]
+	if !ok {
+		it = &item{value: v}
+		m.m[k] = it
+	}
+	it.lastAccess = time.Now().Unix()
+	m.l.Unlock()
+}
+
+func (m *TTLMap) Get(k string) (v string) {
+	m.l.Lock()
+	if it, ok := m.m[k]; ok {
+		v = it.value
+		it.lastAccess = time.Now().Unix()
+	}
+	m.l.Unlock()
+	return
+
 }
 
 // HoneycombAdapter is an adapter that streams JSON to Logstash.
@@ -88,6 +141,8 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 	if err != nil {
 		log.Println("error getting hostname", err)
 	}
+	log.Println("******* saaspanel " + Version)
+
 	for m := range logstream {
 
 		var data map[string]interface{}
@@ -107,6 +162,8 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 		data["logspout_hostname"] = m.Container.Config.Hostname
 		data["logspout_docker_image"] = m.Container.Config.Image
 		data["router_hostname"] = hostname
+
+		// adapt timestamp
 		if timeVal, ok := data["timestamp"]; ok {
 			ts, err := time.Parse(time.RFC3339Nano, timeVal.(string))
 			if err == nil {
@@ -118,6 +175,23 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				ev.AddField("timestamp_error", fmt.Sprintf("problem parsing: %s", err))
 			}
 		}
+
+		// adapt hasura logs
+		if detailVal, ok1 := data["detail"]; ok1 {
+			d := detailVal.(map[string]interface{});
+			if operation, ok2 := d["operation"]; ok2 { // adapt hasura http log
+				data["sp_trace_id"], _ = operation.(map[string]interface{})["request_id"].(string)
+			} else {
+				data["sp_trace_id"] = "no-go2"
+			}
+			// } else if query, ok2 := detailMap["query"]; ok2 { // adapt hasura query log
+			// 	data["sp_trace_id"], _ = detailMap["request_id"].(string)
+			// 	data["hasura_operation_name"], _ = query.(map[string]interface{})["operation_name"].(string)
+			// }
+		} else {
+			data["sp_trace_id"] = "no-go1"
+		}
+
 
 		ev.Add(data)
 
