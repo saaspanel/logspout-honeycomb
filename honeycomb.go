@@ -19,7 +19,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.6"
+	Version                = "v0.0.7"
 )
 
 func init() {
@@ -27,17 +27,17 @@ func init() {
 	libhoney.UserAgentAddition = "logspout-honeycomb"
 }
 
-type item struct {
+type ttlMapItem struct {
 	value      string
 	lastAccess int64
 }
 type TTLMap struct {
-	m map[string]*item
+	m map[string]*ttlMapItem
 	l sync.Mutex
 }
 
 func NewTTLMap(ln int, maxTTL int) (m *TTLMap) {
-	m = &TTLMap{m: make(map[string]*item, ln)}
+	m = &TTLMap{m: make(map[string]*ttlMapItem, ln)}
 	go func() {
 		for now := range time.Tick(time.Second) {
 			m.l.Lock()
@@ -60,7 +60,7 @@ func (m *TTLMap) Put(k, v string) {
 	m.l.Lock()
 	it, ok := m.m[k]
 	if !ok {
-		it = &item{value: v}
+		it = &ttlMapItem{value: v}
 		m.m[k] = it
 	}
 	it.lastAccess = time.Now().Unix()
@@ -180,13 +180,21 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 
 		// adapt hasura logs
 		if detailVal, ok1 := data["detail"]; ok1 {
-			data["sp_span_id"] = uuid.New() // set span id for each hasura log
-
 			d := detailVal.(map[string]interface{})
 			if operation, ok2 := d["operation"]; ok2 { // adapt hasura http log
-				data["sp_trace_id"], _ = operation.(map[string]interface{})["request_id"].(string)
+				requestID, _ := operation.(map[string]interface{})["request_id"].(string)
+
+				// set tracing props
+				data["sp_trace_id"] = requestID
+				data["sp_span_id"] = "http-" + requestID
 			} else if query, ok2 := d["query"]; ok2 { // adapt hasura query log
-				data["sp_trace_id"], _ = d["request_id"].(string)
+				requestID, _ := d["request_id"].(string)
+
+				// set tracing props
+				data["sp_trace_id"] = requestID
+				data["sp_span_id"] = "query-" + requestID
+				data["sp_parent_span_id"] = "http-" + requestID
+
 				data["hasura_operation_name"], _ = query.(map[string]interface{})["operation_name"].(string)
 			}
 		}
