@@ -19,7 +19,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.10"
+	Version                = "v0.0.11"
 )
 
 func init() {
@@ -208,7 +208,7 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				data["sp_parent_span_id"] = "http-" + requestID
 
 				// set hasura query operation name **AND** add to TTL Map so we can send it with the HTTP Log
-				hasuraQueryOperationName, _ := query.(map[string]interface{})["operation_name"].(string)
+				hasuraQueryOperationName, _ := query.(map[string]interface{})["operationName"].(string)
 				data["hasura_query_operation_name"] = hasuraQueryOperationName
 				ttlMap.Put(requestID, hasuraQueryOperationName)
 			}
