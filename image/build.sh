@@ -10,7 +10,7 @@ cd /go/src/github.com/gliderlabs/logspout
 export GOPATH=/go
 
 go get github.com/honeycombio/libhoney-go
-go get github.com/saaspanel/logspout-honeycomb@v0.0.7
+go get github.com/saaspanel/logspout-honeycomb@v0.0.8
 go get
 go build -ldflags "-X main.Version=$1" -o /bin/logspout
 apk del go git mercurial build-base
