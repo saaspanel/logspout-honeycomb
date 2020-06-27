@@ -1,4 +1,5 @@
 # logspout-honeycomb
+
 Honeycomb adapter for Logspout. More documentation can be found [in Honeycomb docs](https://honeycomb.io/docs/connect/logspout/).
 
 Expects to ingest JSON log lines, and will send JSON blobs up to Honeycomb, annotated with the current logspout stream, container, container ID, hostname, and docker image name.
@@ -8,18 +9,19 @@ If the log lines being streamed through Logspout aren't JSON, the contents of th
 # Building
 
 To build the Honeycomb Logspout Docker image, run:
-* `make docker`
+
+- `make docker`
 
 # Configuration and invocation
 
 This module can be configured either by setting environment variables in
 Docker, or by using the [Logspout routesapi](https://github.com/gliderlabs/logspout/tree/master/routesapi). The following variables are available:
 
-Env. Variable | routesapi key | Type | Required? | Description |
-| --- | --- | --- | --- | -----|
-| `HONEYCOMB_WRITE_KEY` | `writeKey` | string | required | Your Honeycomb team's write key. |
-| `HONEYCOMB_DATASET` | `dataset` | string | required | The name of the destination dataset in your Honeycomb account. It will be created if it does not already exist. |
-| `HONEYCOMB_SAMPLE_RATE` | `sampleRate` | integer | optional | Sample your event stream: send 1 out of every N events |
+| Env. Variable           | routesapi key | Type    | Required? | Description                                                                                                     |
+| ----------------------- | ------------- | ------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `HONEYCOMB_WRITE_KEY`   | `writeKey`    | string  | required  | Your Honeycomb team's write key.                                                                                |
+| `HONEYCOMB_DATASET`     | `dataset`     | string  | required  | The name of the destination dataset in your Honeycomb account. It will be created if it does not already exist. |
+| `HONEYCOMB_SAMPLE_RATE` | `sampleRate`  | integer | optional  | Sample your event stream: send 1 out of every N events                                                          |
 
 ### Environment variables
 
