@@ -19,7 +19,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.12"
+	Version                = "v0.0.13"
 )
 
 func init() {
@@ -198,8 +198,8 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				data["hasura_query_operation_name"] = ttlMap.Get(requestID)
 
 				// convert query execution time from seconds to milliseconds
-				if queryExecutionTime := operation.(map[string]interface{})["query_execution_time"].(*float64); queryExecutionTime != nil {
-					data["hasura_query_execution_time"] = *queryExecutionTime * 1000
+				if queryExecutionTime := operation.(map[string]interface{})["query_execution_time"]; queryExecutionTime != nil {
+					data["hasura_query_execution_time"] = queryExecutionTime.(float64) * 1000
 				}
 			} else if query, ok2 := d["query"]; ok2 { // adapt hasura query log
 				requestID, _ := d["request_id"].(string)
