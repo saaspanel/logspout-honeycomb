@@ -18,7 +18,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.3"
+	Version                = "v0.0.5"
 )
 
 func init() {
@@ -142,6 +142,7 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 		log.Println("error getting hostname", err)
 	}
 	log.Println("******* saaspanel " + Version)
+	log.Println(uuid.New())
 
 	for m := range logstream {
 
@@ -178,7 +179,9 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 
 		// adapt hasura logs
 		if detailVal, ok1 := data["detail"]; ok1 {
-			d := detailVal.(map[string]interface{});
+			data["sp_span_id"] = uuid.New() // set span id for each hasura log
+
+			d := detailVal.(map[string]interface{})
 			if operation, ok2 := d["operation"]; ok2 { // adapt hasura http log
 				data["sp_trace_id"], _ = operation.(map[string]interface{})["request_id"].(string)
 			} else if query, ok2 := d["query"]; ok2 { // adapt hasura query log

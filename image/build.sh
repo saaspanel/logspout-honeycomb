@@ -11,7 +11,7 @@ export GOPATH=/go
 
 go get github.com/honeycombio/libhoney-go
 go get
-go get github.com/saaspanel/logspout-honeycomb@v0.0.4
+go get github.com/saaspanel/logspout-honeycomb@v0.0.5
 go build -ldflags "-X main.Version=$1" -o /bin/logspout
 apk del go git mercurial build-base
 rm -rf /go
