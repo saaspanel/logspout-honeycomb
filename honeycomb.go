@@ -20,7 +20,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.19"
+	Version                = "v0.0.20"
 )
 
 func init() {
