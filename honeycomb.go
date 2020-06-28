@@ -19,12 +19,26 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.15"
+	Version                = "v0.0.16"
 )
 
 func init() {
 	router.AdapterFactories.Register(NewHoneycombAdapter, "honeycomb")
 	libhoney.UserAgentAddition = "logspout-honeycomb"
+}
+
+// per https://docs.honeycomb.io/getting-data-in/tracing/send-trace-data/#manual-tracing
+type manualTrace struct {
+	TraceID  string `json:"trace_id"`            // The ID of the trace this span belongs to
+	SpanID   string `json:"span_id"`             // A unique ID for each span
+	ParentID string `json:"parent_id,omitempty"` // The ID of this span’s parent span, the call location the current span was called from
+}
+
+type manualTraceEvent struct {
+	Name        string      `json:"name"`         // The specific call location (like a function or method name)
+	ServiceName string      `json:"service_name"` // The name of the service that generated this span
+	DurationMS  int         `json:"duration_ms"`  // How much time the span took, in milliseconds
+	Trace       manualTrace `json:"trace"`
 }
 
 type ttlMapItem struct {
@@ -181,38 +195,56 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 			}
 		}
 
-		// adapt hasura logs
+		// adapt hasura logs: https://hasura.io/docs/1.0/graphql/manual/deployment/logging.html#different-log-types
 		// NOTE: for a given request id, the order in which Hasura write the logs is:
 		//       1) Query Log
 		//       2) HTTP Log
-		if detailVal, ok1 := data["detail"]; ok1 {
+		if detailVal, ok1 := data["detail"]; ok1 { // we're dealing with a Hasura Log type
 			d := detailVal.(map[string]interface{})
+			traceEvent := manualTraceEvent{ServiceName: "hasura"}
+			trace := manualTrace{}
+
 			if operation, ok2 := d["operation"]; ok2 { // adapt hasura http log
 				requestID, _ := operation.(map[string]interface{})["request_id"].(string)
 
 				// set tracing props
-				data["sp_trace_id"] = requestID
-				data["sp_span_id"] = "http-" + requestID
+				trace.TraceID = requestID
+				trace.SpanID = "http-" + requestID
+				// data["sp_trace_id"] = requestID
+				// data["sp_span_id"] = "http-" + requestID
 
-				// set operation name that we stored in our TTL
-				data["hasura_query_operation_name"] = ttlMap.Get(requestID)
+				// get the operation name that we stored in our TTL Map
+				// and use to set the trace's Name property
+				traceEvent.Name = ttlMap.Get(requestID)
+				// data["hasura_query_operation_name"] = ttlMap.Get(requestID)
 
 				// convert query execution time from seconds to milliseconds
 				if queryExecutionTime := operation.(map[string]interface{})["query_execution_time"]; queryExecutionTime != nil {
-					data["hasura_query_execution_time_in_ms"] = queryExecutionTime.(float64) * 1000
+					traceEvent.DurationMS = int(queryExecutionTime.(float64) * 1000)
+					// data["hasura_query_execution_time_in_ms"] = queryExecutionTime.(float64) * 1000
 				}
 			} else if query, ok2 := d["query"]; ok2 { // adapt hasura query log
 				requestID, _ := d["request_id"].(string)
 
 				// set tracing props
-				data["sp_trace_id"] = requestID
-				data["sp_span_id"] = "query-" + requestID
-				data["sp_parent_span_id"] = "http-" + requestID
+				trace.TraceID = requestID
+				trace.SpanID = "query-" + requestID
+				trace.ParentID = "http-" + requestID
+				// data["sp_trace_id"] = requestID
+				// data["sp_span_id"] = "query-" + requestID
+				// data["sp_parent_span_id"] = "http-" + requestID
 
 				// set hasura query operation name **AND** add to TTL Map so we can send it with the HTTP Log
-				hasuraQueryOperationName, _ := query.(map[string]interface{})["operationName"].(string)
-				data["hasura_query_operation_name"] = hasuraQueryOperationName
-				ttlMap.Put(requestID, hasuraQueryOperationName)
+				traceEvent.Name, _ = query.(map[string]interface{})["operationName"].(string)
+				ttlMap.Put(requestID, traceEvent.Name)
+				// data["hasura_query_operation_name"] = hasuraQueryOperationName
+			}
+
+			// merge the hasura trace event properties with the honeycomb event properties
+			if j, err := json.Marshal(traceEvent); err != nil {
+				log.Panicln(err)
+			} else {
+				json.Unmarshal(j, &data)
 			}
 		}
 
