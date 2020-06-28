@@ -22,7 +22,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.21"
+	Version                = "v0.0.22"
 )
 
 var timezone = ""
@@ -208,8 +208,8 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 		// adapt timestamp
 		if timeVal, ok := data["timestamp"]; ok {
 			// ts, err := time.Parse(time.RFC3339Nano, timeVal.(string))
-			// ts, err := time.Parse("2006-01-02T15:04:05Z0700", timeVal) // NOTE: this is what we need for Hasura (ISO8061 w/o colon)
-			ts, err := dateparse.ParseLocal(timeVal) // use datparse module, which performantly auto-detects and parses the datetime string
+			// ts, err := time.Parse("2006-01-02T15:04:05Z0700", timeVal.(string)) // NOTE: this is what we need for Hasura (ISO8061 w/o colon)
+			ts, err := dateparse.ParseLocal(timeVal.(string)) // use datparse module, which performantly auto-detects and parses the datetime string
 			if err == nil {
 				// we got a valid timestamp. Override the event's timestamp and remove the
 				// field from data so it's not duplicated
