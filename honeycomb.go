@@ -19,7 +19,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.16"
+	Version                = "v0.0.17"
 )
 
 func init() {
@@ -240,7 +240,10 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				// data["hasura_query_operation_name"] = hasuraQueryOperationName
 			}
 
-			// merge the hasura trace event properties with the honeycomb event properties
+			// 1) set the trace event's trace property
+			traceEvent.Trace = trace
+
+			// 2) merge the hasura trace event properties with the honeycomb event properties
 			if j, err := json.Marshal(traceEvent); err != nil {
 				log.Panicln(err)
 			} else {
