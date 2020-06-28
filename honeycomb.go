@@ -3,6 +3,7 @@ package honeycomb
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/araddon/dateparse"
 	"github.com/gliderlabs/logspout/router"
 	"github.com/google/uuid"
 	"github.com/honeycombio/libhoney-go"
@@ -20,12 +22,29 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.20"
+	Version                = "v0.0.21"
 )
+
+var timezone = ""
 
 func init() {
 	router.AdapterFactories.Register(NewHoneycombAdapter, "honeycomb")
 	libhoney.UserAgentAddition = "logspout-honeycomb"
+
+	// set timezone to UTC for all subsequent datetime parsing
+	flag.StringVar(&timezone, "timezone", "UTC", "Timezone aka `America/Los_Angeles` formatted time-zone")
+	flag.Parse()
+
+	if timezone != "" {
+		// NOTE:  This is very, very important to understand
+		// time-parsing in go
+		loc, err := time.LoadLocation(timezone)
+		if err != nil {
+			panic(err.Error())
+		}
+		time.Local = loc
+	}
+
 }
 
 // finally tracked down how honeycomb sends its trace data via golang
@@ -188,10 +207,12 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 
 		// adapt timestamp
 		if timeVal, ok := data["timestamp"]; ok {
-			ts, err := time.Parse(time.RFC3339Nano, timeVal.(string))
+			// ts, err := time.Parse(time.RFC3339Nano, timeVal.(string))
+			// ts, err := time.Parse("2006-01-02T15:04:05Z0700", timeVal) // NOTE: this is what we need for Hasura (ISO8061 w/o colon)
+			ts, err := dateparse.ParseLocal(timeVal) // use datparse module, which performantly auto-detects and parses the datetime string
 			if err == nil {
 				// we got a valid timestamp. Override the event's timestamp and remove the
-				// field from data so we don't get it reported twice
+				// field from data so it's not duplicated
 				ev.Timestamp = ts
 				delete(data, "timestamp")
 			} else {
