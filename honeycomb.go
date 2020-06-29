@@ -22,7 +22,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.22"
+	Version                = "v0.0.23"
 )
 
 var timezone = ""
@@ -240,9 +240,13 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				span.TraceID = requestID
 				span.ID = "http-" + requestID
 
-				// get the operation name that we stored in our TTL Map
+				// get the hasura query info that we stored in our TTL Map
 				// and use to set the span's Name property
-				span.Name = ttlMap.Get(requestID)
+				// EX: hasura info => "query|StatusComponents"
+				//                    "mutation|StatusComponents"
+				mapHasuraQueryInfo := strings.Split(ttlMap.Get(requestID), "|")
+				data["hasura.query_type"] = mapHasuraQueryInfo[0]
+				span.Name = mapHasuraQueryInfo[1]
 
 				// convert query execution time from seconds to milliseconds
 				if queryExecutionTime := operation.(map[string]interface{})["query_execution_time"]; queryExecutionTime != nil {
@@ -259,7 +263,9 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 
 				// set hasura query operation name **AND** add to TTL Map so we can send it with the HTTP Log
 				hasuraQueryOperationName, _ := query.(map[string]interface{})["operationName"].(string)
-				ttlMap.Put(requestID, hasuraQueryOperationName)
+				hasuraQueryQuery, _ := query.(map[string]interface{})["query"].(string)
+				hasuraQueryType := strings.SplitN(hasuraQueryQuery, " ", 2)
+				ttlMap.Put(requestID, hasuraQueryType[0] + "|" + hasuraQueryOperationName)
 			}
 
 			// merge the hasura span properties with the honeycomb event properties
