@@ -22,7 +22,7 @@ import (
 const (
 	DefaultHoneycombAPIURL = "https://api.honeycomb.io"
 	DefaultSampleRate      = 1
-	Version                = "v0.0.23"
+	Version                = "v0.0.24"
 )
 
 var timezone = ""
@@ -244,9 +244,15 @@ func (a *HoneycombAdapter) Stream(logstream chan *router.Message) {
 				// and use to set the span's Name property
 				// EX: hasura info => "query|StatusComponents"
 				//                    "mutation|StatusComponents"
-				mapHasuraQueryInfo := strings.Split(ttlMap.Get(requestID), "|")
-				data["hasura.query_type"] = mapHasuraQueryInfo[0]
-				span.Name = mapHasuraQueryInfo[1]
+				hasuraQueryInfo := ttlMap.Get(requestID)
+
+				// NOTE: in the event of an hasura http log error, we will not have a corresponding hasura query log
+				//       thus, no key in ttlMap, which will return an empty string when Get(requestID) is invoked
+				if (len(hasuraQueryInfo) > 0) {
+					mapHasuraQueryInfo := strings.Split(hasuraQueryInfo, "|")
+					data["hasura.query_type"] = mapHasuraQueryInfo[0]
+					span.Name = mapHasuraQueryInfo[1]
+				}
 
 				// convert query execution time from seconds to milliseconds
 				if queryExecutionTime := operation.(map[string]interface{})["query_execution_time"]; queryExecutionTime != nil {
